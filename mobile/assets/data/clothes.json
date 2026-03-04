@@ -17,6 +17,13 @@
   },
   {
     "id": "5",
-    "name": "T.002"
+    "name": "T.002",
+    "origin": "Made In France",
+    "reference": "T.OO2.1",
+    "matière": "96% Coton / 4% Elasthane",
+    "entretien": [
+      "Lavage à 30°", "Pas de sèche linge", "Repassage à basse température(Max 110°)", "Pas de Javel"
+    ],
+    "shop": "https://use-less.fr/?page_id=1999"
   }
 ]

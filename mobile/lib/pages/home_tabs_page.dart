@@ -12,6 +12,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'dart:async';
 import '../services/nfc_scan.dart';
 import '../services/pending_scans.dart';
+import 'cloth_detail_page.dart';
 
 class HomeTabsPage extends StatefulWidget {
   const HomeTabsPage({super.key});
@@ -60,7 +61,6 @@ class _HomeTabsPageState extends State<HomeTabsPage> {
       await PendingScans.instance.add(name);
       await _consumePendingScans();
     });
-    _nfcSub = NfcScan.instance.stream.listen(onNfcScanName);
   }
 
   bool _consuming = false;
@@ -118,36 +118,6 @@ class _HomeTabsPageState extends State<HomeTabsPage> {
         context,
       ).showSnackBar(SnackBar(content: Text("Erreur ajout $name: $e")));
     }
-  }
-
-  Future<void> onNfcScanName(String scannedName) async {
-    final name = scannedName.trim();
-
-    if (_nameToId.isEmpty) {
-      final clothes = await _clothesFuture;
-      if (!mounted) return;
-      _nameToId = {for (final c in clothes) c.name: c.id};
-    }
-
-    final clothId = _nameToId[name];
-
-    if (clothId == null) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Erreur : le vêtement n'est pas dans la collection"),
-        ),
-      );
-      return;
-    }
-
-    await _libraryApi.scanCloth(clothId);
-
-    if (!mounted) return;
-    _reloadLibrary();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Vêtement ajouté à la bibliothèque")),
-    );
   }
 
   @override
@@ -292,12 +262,15 @@ class _HomeTabsPageState extends State<HomeTabsPage> {
                               clothes: library,
                               emptyText:
                                   'Aucun vêtement scanné pour le moment.',
+                              showShopLink:
+                                  false, // ✅ Bibliothèque: pas de shop
                             );
                           },
                         ),
                         ClothesGridPage(
                           clothes: clothes,
                           emptyText: 'Aucun vêtement dans la collection.',
+                          showShopLink: true, // ✅ Collection: shop OK
                         ),
                       ],
                     );
@@ -494,11 +467,13 @@ class ClothesGridPage extends StatefulWidget {
     required this.clothes,
     required this.emptyText,
     this.pageSize = 10,
+    required this.showShopLink,
   });
 
   final List<Cloth> clothes;
   final String emptyText;
   final int pageSize;
+  final bool showShopLink;
 
   @override
   State<ClothesGridPage> createState() => _ClothesGridPageState();
@@ -574,7 +549,10 @@ class _ClothesGridPageState extends State<ClothesGridPage> {
                 itemCount: items.length,
                 itemBuilder: (context, index) {
                   final c = items[index];
-                  return _ClothTile(cloth: c);
+                  return _ClothTile(
+                    cloth: c,
+                    showShopLink: widget.showShopLink,
+                  );
                 },
               );
             },
@@ -607,44 +585,55 @@ class _ClothesGridPageState extends State<ClothesGridPage> {
 }
 
 class _ClothTile extends StatelessWidget {
-  const _ClothTile({required this.cloth});
+  const _ClothTile({required this.cloth, required this.showShopLink});
 
   final Cloth cloth;
+  final bool showShopLink;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Expanded(
-          child: Center(
-            child: Image.asset(
-              cloth.imageAsset,
-              fit: BoxFit.contain,
-              errorBuilder: (context, error, stack) {
-                // placeholder si l’image n’existe pas encore
-                return Container(
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    border: Border.all(color: const Color(0xFFEAEAEA)),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  alignment: Alignment.center,
-                  child: const Icon(Icons.image_outlined),
-                );
-              },
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: () {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) =>
+                ClothDetailPage(cloth: cloth, showShopLink: showShopLink),
+          ),
+        );
+      },
+      child: Column(
+        children: [
+          Expanded(
+            child: Center(
+              child: Image.asset(
+                cloth.imageAsset,
+                fit: BoxFit.contain,
+                errorBuilder: (context, error, stack) {
+                  return Container(
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      border: Border.all(color: const Color(0xFFEAEAEA)),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    alignment: Alignment.center,
+                    child: const Icon(Icons.image_outlined),
+                  );
+                },
+              ),
             ),
           ),
-        ),
-        const SizedBox(height: 10),
-        Text(
-          cloth.name,
-          style: const TextStyle(
-            fontSize: 13,
-            letterSpacing: 0.5,
-            fontWeight: FontWeight.w500,
+          const SizedBox(height: 10),
+          Text(
+            cloth.name,
+            style: const TextStyle(
+              fontSize: 13,
+              letterSpacing: 0.5,
+              fontWeight: FontWeight.w500,
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
