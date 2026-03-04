@@ -19,14 +19,14 @@ class AuthPage extends StatelessWidget {
                   const SizedBox(height: 40),
 
                   const Text(
-                    "Log in or sign up",
+                    "Se connecter ou créer un compte",
                     style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600),
                   ),
 
                   const SizedBox(height: 24),
 
                   _SocialButton(
-                    text: "Continue with Google",
+                    text: "Continuer avec Google",
                     icon: Icons.g_mobiledata,
                     onPressed: () {},
                   ),
@@ -34,7 +34,7 @@ class AuthPage extends StatelessWidget {
                   const SizedBox(height: 12),
 
                   _SocialButton(
-                    text: "Continue with Apple",
+                    text: "Continuer avec Apple",
                     icon: Icons.apple,
                     onPressed: () {},
                   ),

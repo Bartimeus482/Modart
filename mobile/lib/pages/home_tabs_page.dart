@@ -1,6 +1,12 @@
 import 'package:flutter/material.dart';
-import '../services/clothes_service.dart';
+
 import '../models/cloth.dart';
+import '../models/user.dart';
+import '../services/api_client.dart';
+import '../services/auth_api.dart';
+import '../services/clothes_service.dart';
+import 'email_page.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class HomeTabsPage extends StatefulWidget {
   const HomeTabsPage({super.key});
@@ -11,14 +17,46 @@ class HomeTabsPage extends StatefulWidget {
 
 class _HomeTabsPageState extends State<HomeTabsPage> {
   final _service = ClothesService();
-
+  late final AuthApi _auth = AuthApi(
+    ApiClient(baseUrl: dotenv.env['BASE_URL']!),
+  );
   late final Future<List<Cloth>> _clothesFuture;
+
+  User? _me;
+  bool _meLoading = true;
 
   @override
   void initState() {
     super.initState();
-
     _clothesFuture = _service.loadClothes();
+    _loadMe();
+  }
+
+  Future<void> _loadMe() async {
+    setState(() => _meLoading = true);
+    try {
+      final me = await _auth.checkAuth();
+      if (!mounted) return;
+      setState(() => _me = me);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _me = null);
+    } finally {
+      if (mounted) setState(() => _meLoading = false);
+    }
+  }
+
+  Future<void> _logout() async {
+    await _auth.logout();
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const EmailPage()),
+      (route) => false,
+    );
+  }
+
+  void _openSettingsDrawer() {
+    Scaffold.of(context).openEndDrawer();
   }
 
   @override
@@ -26,12 +64,87 @@ class _HomeTabsPageState extends State<HomeTabsPage> {
     return DefaultTabController(
       length: 2,
       child: Scaffold(
+        endDrawer: const _SettingsDrawer(),
         body: SafeArea(
           child: Column(
             children: [
               const SizedBox(height: 8),
-              const _CenteredMinimalTabs(),
+
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Row(
+                  children: [
+                    const Expanded(child: SizedBox()),
+
+                    const Expanded(flex: 2, child: _CenteredMinimalTabs()),
+
+                    Expanded(
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: Builder(
+                          builder: (ctx) {
+                            return PopupMenuButton<String>(
+                              tooltip: 'Compte',
+                              icon: const Icon(Icons.account_circle_outlined),
+                              onSelected: (value) async {
+                                if (value == 'settings') {
+                                  _openSettingsDrawer();
+                                } else if (value == 'logout') {
+                                  await _logout();
+                                } else if (value == 'refresh_me') {
+                                  await _loadMe();
+                                }
+                              },
+                              itemBuilder: (_) => [
+                                PopupMenuItem<String>(
+                                  enabled: false,
+                                  value: 'noop',
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const Icon(
+                                        Icons.person_outline,
+                                        size: 18,
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: _meLoading
+                                            ? const Text('Chargement…')
+                                            : Text(
+                                                _me?.email ??
+                                                    'Utilisateur (hors ligne)',
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const PopupMenuDivider(),
+                                const PopupMenuItem<String>(
+                                  value: 'logout',
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.logout, size: 18),
+                                      SizedBox(width: 10),
+                                      Text('Se déconnecter'),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
               const SizedBox(height: 12),
+
               Expanded(
                 child: FutureBuilder<List<Cloth>>(
                   future: _clothesFuture,
@@ -45,8 +158,7 @@ class _HomeTabsPageState extends State<HomeTabsPage> {
                     }
 
                     final clothes = snapshot.data ?? [];
-                    final library =
-                        <Cloth>[]; // bibliothèque vide pour l’instant
+                    final library = <Cloth>[];
 
                     return TabBarView(
                       children: [
@@ -76,41 +188,70 @@ class _CenteredMinimalTabs extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: SizedBox(
-        height: 34,
-        child: TabBar(
-          isScrollable: false,
+    return SizedBox(
+      height: 34,
+      child: TabBar(
+        isScrollable: false,
 
-          splashFactory: NoSplash.splashFactory,
-          overlayColor: const WidgetStatePropertyAll(Colors.transparent),
-          enableFeedback: false,
+        splashFactory: NoSplash.splashFactory,
+        overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+        enableFeedback: false,
 
-          labelStyle: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w400,
-            letterSpacing: 0.7,
+        labelStyle: const TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w400,
+          letterSpacing: 0.7,
+        ),
+        unselectedLabelStyle: const TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w400,
+          letterSpacing: 0.7,
+        ),
+
+        labelColor: Colors.black,
+        unselectedLabelColor: Color(0xFFBDBDBD),
+
+        indicatorSize: TabBarIndicatorSize.label,
+        indicatorColor: Colors.black,
+        indicatorWeight: 1.0,
+
+        dividerColor: Colors.transparent,
+
+        tabs: const [
+          Tab(child: Center(child: Text('BIBLIOTHEQUE'))),
+          Tab(child: Center(child: Text('COLLECTION'))),
+        ],
+      ),
+    );
+  }
+}
+
+class _SettingsDrawer extends StatelessWidget {
+  const _SettingsDrawer();
+
+  @override
+  Widget build(BuildContext context) {
+    return Drawer(
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Paramètres',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 16),
+              const Text('Ajoute ici tes options : profil, thème, etc.'),
+              const Spacer(),
+              FilledButton.icon(
+                onPressed: () => Navigator.of(context).maybePop(),
+                icon: const Icon(Icons.close),
+                label: const Text('Fermer'),
+              ),
+            ],
           ),
-          unselectedLabelStyle: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w400,
-            letterSpacing: 0.7,
-          ),
-
-          labelColor: Colors.black,
-          unselectedLabelColor: Color(0xFFBDBDBD),
-
-          indicatorSize: TabBarIndicatorSize.label,
-          indicatorColor: Colors.black,
-          indicatorWeight: 1.0,
-
-          dividerColor: Colors.transparent,
-
-          tabs: const [
-            Tab(child: Center(child: Text('BIBLIOTHEQUE'))),
-            Tab(child: Center(child: Text('COLLECTION'))),
-          ],
         ),
       ),
     );
@@ -157,7 +298,6 @@ class _ClothesGridPageState extends State<ClothesGridPage> {
   @override
   void didUpdateWidget(covariant ClothesGridPage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Si la liste change (filtre onglets), on s’assure que la page est valide
     if (_page > _pageCount - 1) {
       _page = (_pageCount - 1).clamp(0, _pageCount - 1);
     }
@@ -178,16 +318,16 @@ class _ClothesGridPageState extends State<ClothesGridPage> {
             builder: (context, constraints) {
               final w = constraints.maxWidth;
 
-              // Ajuste automatique du nombre de colonnes selon la largeur
               int crossAxisCount = 2;
               if (w >= 1200) {
                 crossAxisCount = 6;
-              } else if (w >= 900)
+              } else if (w >= 900) {
                 crossAxisCount = 5;
-              else if (w >= 650)
+              } else if (w >= 650) {
                 crossAxisCount = 4;
-              else if (w >= 420)
+              } else if (w >= 420) {
                 crossAxisCount = 3;
+              }
 
               return GridView.builder(
                 padding: const EdgeInsets.symmetric(
@@ -198,7 +338,7 @@ class _ClothesGridPageState extends State<ClothesGridPage> {
                   crossAxisCount: crossAxisCount,
                   mainAxisSpacing: 28,
                   crossAxisSpacing: 28,
-                  childAspectRatio: 1 / 1.15, // image + label en dessous
+                  childAspectRatio: 1 / 1.15,
                 ),
                 itemCount: items.length,
                 itemBuilder: (context, index) {
@@ -209,8 +349,6 @@ class _ClothesGridPageState extends State<ClothesGridPage> {
             },
           ),
         ),
-
-        // Pagination uniquement si > pageSize
         if (widget.clothes.length > widget.pageSize)
           Padding(
             padding: const EdgeInsets.only(bottom: 12, top: 4),
@@ -252,7 +390,6 @@ class _ClothTile extends StatelessWidget {
               cloth.imageAsset,
               fit: BoxFit.contain,
               errorBuilder: (context, error, stack) {
-                // placeholder si l’image n’existe pas encore
                 return Container(
                   width: double.infinity,
                   decoration: BoxDecoration(

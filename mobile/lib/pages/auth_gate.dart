@@ -3,6 +3,7 @@ import '../services/api_client.dart';
 import '../services/auth_api.dart';
 import 'email_page.dart';
 import 'home_tabs_page.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
@@ -12,8 +13,9 @@ class AuthGate extends StatefulWidget {
 }
 
 class _AuthGateState extends State<AuthGate> {
-  static const baseUrl = 'http://10.247.101.170:8081';
-  late final AuthApi _auth = AuthApi(ApiClient(baseUrl: baseUrl));
+  late final AuthApi _auth = AuthApi(
+    ApiClient(baseUrl: dotenv.env['BASE_URL']!),
+  );
 
   @override
   void initState() {

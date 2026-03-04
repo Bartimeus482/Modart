@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/api_client.dart';
 import '../services/auth_api.dart';
 import 'password_page.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class EmailPage extends StatefulWidget {
   const EmailPage({super.key});
@@ -11,9 +12,9 @@ class EmailPage extends StatefulWidget {
 }
 
 class _EmailPageState extends State<EmailPage> {
-  static const baseUrl =
-      'http://10.213.216.113:8081'; // ✅ change si téléphone réel
-  late final AuthApi _auth = AuthApi(ApiClient(baseUrl: baseUrl));
+  late final AuthApi _auth = AuthApi(
+    ApiClient(baseUrl: dotenv.env['BASE_URL']!),
+  );
   final _emailCtrl = TextEditingController();
   bool _loading = false;
 
