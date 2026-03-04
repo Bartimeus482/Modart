@@ -18,7 +18,10 @@ class ClothDetailPage extends StatelessWidget {
       fontWeight: FontWeight.w400,
       height: 1.35,
     );
-
+    debugPrint(
+      'DETAIL ${cloth.name} origin=${cloth.origin} ref=${cloth.reference} '
+      'mat=${cloth.matiere} ent=${cloth.entretien} shop=${cloth.shop}',
+    );
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(

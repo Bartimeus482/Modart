@@ -39,7 +39,9 @@ class _HomeTabsPageState extends State<HomeTabsPage> {
   bool _meLoading = true;
 
   Map<String, String> _nameToId = {};
-
+  final Map<String, Cloth> _idToCloth = {};
+  final Map<String, Cloth> _nameToCloth = {};
+  Set<String> _libraryIds = {};
   @override
   void initState() {
     super.initState();
@@ -49,18 +51,46 @@ class _HomeTabsPageState extends State<HomeTabsPage> {
       if (!mounted) return;
       setState(() {
         _nameToId = {for (final c in clothes) c.name: c.id};
+        _idToCloth
+          ..clear()
+          ..addEntries(clothes.map((c) => MapEntry(c.id, c)));
+        _nameToCloth
+          ..clear()
+          ..addEntries(clothes.map((c) => MapEntry(c.name, c)));
       });
     });
 
     _loadMe();
     _syncFromJsonAndReloadLibrary();
+    _libraryFuture = _fetchAndEnrichLibrary();
 
     _consumePendingScans();
-
+    _reloadLibrary();
     _nfcSub = NfcScan.instance.stream.listen((name) async {
       await PendingScans.instance.add(name);
       await _consumePendingScans();
     });
+  }
+
+  Future<List<Cloth>> _fetchAndEnrichLibrary() async {
+    final items = await _libraryApi.getLibrary();
+
+    // s'assurer que la map JSON est prête
+    if (_idToCloth.isEmpty || _nameToCloth.isEmpty) {
+      final clothes = await _clothesFuture;
+      _idToCloth
+        ..clear()
+        ..addEntries(clothes.map((c) => MapEntry(c.id, c)));
+      _nameToCloth
+        ..clear()
+        ..addEntries(clothes.map((c) => MapEntry(c.name, c)));
+    }
+
+    _libraryIds = items.map((c) => c.id).toSet();
+
+    return items
+        .map((c) => _idToCloth[c.id] ?? _nameToCloth[c.name] ?? c)
+        .toList();
   }
 
   bool _consuming = false;
@@ -99,11 +129,27 @@ class _HomeTabsPageState extends State<HomeTabsPage> {
       return;
     }
 
+    if (_libraryIds.isEmpty) {
+      try {
+        final current = await _libraryApi.getLibrary();
+        _libraryIds = current.map((c) => c.id).toSet();
+      } catch (_) {
+        // si backend down, on laisse continuer
+      }
+    }
+
+    if (_libraryIds.contains(clothId)) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Vêtement $name est déjà scanné")));
+      return;
+    }
+
     try {
       await _libraryApi.scanCloth(clothId);
       if (!mounted) return;
-
-      _reloadLibrary(); // force refresh
+      _libraryIds.add(clothId);
+      await _reloadLibrary();
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text("$name ajouté à la bibliothèque")));
@@ -130,13 +176,16 @@ class _HomeTabsPageState extends State<HomeTabsPage> {
     try {
       await _sync.syncFromAssets();
     } catch (_) {}
-    _reloadLibrary();
+    await _reloadLibrary();
   }
 
-  void _reloadLibrary() {
+  Future<void> _reloadLibrary() async {
+    final future = _fetchAndEnrichLibrary();
+    if (!mounted) return;
     setState(() {
-      _libraryFuture = _libraryApi.getLibrary();
+      _libraryFuture = future;
     });
+    await future;
   }
 
   Future<void> _loadMe() async {
@@ -244,7 +293,7 @@ class _HomeTabsPageState extends State<HomeTabsPage> {
                     return TabBarView(
                       children: [
                         FutureBuilder<List<Cloth>>(
-                          future: _libraryFuture ?? _libraryApi.getLibrary(),
+                          future: _libraryFuture,
                           builder: (context, libSnap) {
                             if (libSnap.connectionState ==
                                 ConnectionState.waiting) {
