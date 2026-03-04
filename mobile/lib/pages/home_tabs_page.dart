@@ -5,8 +5,13 @@ import '../models/user.dart';
 import '../services/api_client.dart';
 import '../services/auth_api.dart';
 import '../services/clothes_service.dart';
+import '../services/library_api.dart';
+import '../services/collection_sync_service.dart';
 import 'email_page.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'dart:async';
+import '../services/nfc_scan.dart';
+import '../services/pending_scans.dart';
 
 class HomeTabsPage extends StatefulWidget {
   const HomeTabsPage({super.key});
@@ -16,20 +21,152 @@ class HomeTabsPage extends StatefulWidget {
 }
 
 class _HomeTabsPageState extends State<HomeTabsPage> {
+  late final ApiClient _client = ApiClient(baseUrl: dotenv.env['BASE_URL']!);
+
+  late final AuthApi _auth = AuthApi(_client);
+  late final LibraryApi _libraryApi = LibraryApi(_client);
+  late final CollectionSyncService _sync = CollectionSyncService(_client);
+
   final _service = ClothesService();
-  late final AuthApi _auth = AuthApi(
-    ApiClient(baseUrl: dotenv.env['BASE_URL']!),
-  );
+
+  StreamSubscription<String>? _nfcSub;
+
   late final Future<List<Cloth>> _clothesFuture;
+  Future<List<Cloth>>? _libraryFuture;
 
   User? _me;
   bool _meLoading = true;
+
+  Map<String, String> _nameToId = {};
 
   @override
   void initState() {
     super.initState();
     _clothesFuture = _service.loadClothes();
+
+    _clothesFuture.then((clothes) {
+      if (!mounted) return;
+      setState(() {
+        _nameToId = {for (final c in clothes) c.name: c.id};
+      });
+    });
+
     _loadMe();
+    _syncFromJsonAndReloadLibrary();
+
+    _consumePendingScans();
+
+    _nfcSub = NfcScan.instance.stream.listen((name) async {
+      await PendingScans.instance.add(name);
+      await _consumePendingScans();
+    });
+    _nfcSub = NfcScan.instance.stream.listen(onNfcScanName);
+  }
+
+  bool _consuming = false;
+
+  Future<void> _consumePendingScans() async {
+    if (_consuming) return;
+    _consuming = true;
+
+    try {
+      if (_nameToId.isEmpty) {
+        final clothes = await _clothesFuture;
+        if (!mounted) return;
+        _nameToId = {for (final c in clothes) c.name: c.id};
+      }
+
+      final pending = await PendingScans.instance.popAll();
+      if (pending.isEmpty) return;
+
+      for (final scannedName in pending) {
+        if (!mounted) return;
+        await _processOneScan(scannedName);
+      }
+    } finally {
+      _consuming = false;
+    }
+  }
+
+  Future<void> _processOneScan(String scannedName) async {
+    final name = scannedName.trim();
+    final clothId = _nameToId[name];
+
+    if (clothId == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("$name : pas dans la collection")));
+      return;
+    }
+
+    try {
+      await _libraryApi.scanCloth(clothId);
+      if (!mounted) return;
+
+      _reloadLibrary(); // force refresh
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("$name ajouté à la bibliothèque")));
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Erreur ajout $name: ${e.error}")));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Erreur ajout $name: $e")));
+    }
+  }
+
+  Future<void> onNfcScanName(String scannedName) async {
+    final name = scannedName.trim();
+
+    if (_nameToId.isEmpty) {
+      final clothes = await _clothesFuture;
+      if (!mounted) return;
+      _nameToId = {for (final c in clothes) c.name: c.id};
+    }
+
+    final clothId = _nameToId[name];
+
+    if (clothId == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Erreur : le vêtement n'est pas dans la collection"),
+        ),
+      );
+      return;
+    }
+
+    await _libraryApi.scanCloth(clothId);
+
+    if (!mounted) return;
+    _reloadLibrary();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Vêtement ajouté à la bibliothèque")),
+    );
+  }
+
+  @override
+  void dispose() {
+    _nfcSub?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _syncFromJsonAndReloadLibrary() async {
+    try {
+      await _sync.syncFromAssets();
+    } catch (_) {}
+    _reloadLibrary();
+  }
+
+  void _reloadLibrary() {
+    setState(() {
+      _libraryFuture = _libraryApi.getLibrary();
+    });
   }
 
   Future<void> _loadMe() async {
@@ -61,87 +198,62 @@ class _HomeTabsPageState extends State<HomeTabsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final w = MediaQuery.of(context).size.width;
+    final isMobile = w < 600;
+
     return DefaultTabController(
       length: 2,
       child: Scaffold(
-        endDrawer: const _SettingsDrawer(),
+        endDrawer: _SettingsDrawer(email: _me?.email),
         body: SafeArea(
           child: Column(
             children: [
               const SizedBox(height: 8),
 
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Row(
-                  children: [
-                    const Expanded(child: SizedBox()),
-
-                    const Expanded(flex: 2, child: _CenteredMinimalTabs()),
-
-                    Expanded(
-                      child: Align(
-                        alignment: Alignment.centerRight,
-                        child: Builder(
-                          builder: (ctx) {
-                            return PopupMenuButton<String>(
-                              tooltip: 'Compte',
-                              icon: const Icon(Icons.account_circle_outlined),
-                              onSelected: (value) async {
-                                if (value == 'settings') {
-                                  _openSettingsDrawer();
-                                } else if (value == 'logout') {
-                                  await _logout();
-                                } else if (value == 'refresh_me') {
-                                  await _loadMe();
-                                }
-                              },
-                              itemBuilder: (_) => [
-                                PopupMenuItem<String>(
-                                  enabled: false,
-                                  value: 'noop',
-                                  child: Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      const Icon(
-                                        Icons.person_outline,
-                                        size: 18,
-                                      ),
-                                      const SizedBox(width: 10),
-                                      Expanded(
-                                        child: _meLoading
-                                            ? const Text('Chargement…')
-                                            : Text(
-                                                _me?.email ??
-                                                    'Utilisateur (hors ligne)',
-                                                style: const TextStyle(
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                              ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const PopupMenuDivider(),
-                                const PopupMenuItem<String>(
-                                  value: 'logout',
-                                  child: Row(
-                                    children: [
-                                      Icon(Icons.logout, size: 18),
-                                      SizedBox(width: 10),
-                                      Text('Se déconnecter'),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            );
-                          },
+              if (isMobile) ...[
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Row(
+                    children: [
+                      const Spacer(),
+                      _AccountMenu(
+                        email: _me?.email,
+                        loading: _meLoading,
+                        onLogout: _logout,
+                        onOpenSettings: _openSettingsDrawer,
+                        onRefreshMe: _loadMe,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 6),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 12),
+                  child: _CenteredMinimalTabs(),
+                ),
+              ] else ...[
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Row(
+                    children: [
+                      const Expanded(child: SizedBox()),
+                      const Expanded(flex: 2, child: _CenteredMinimalTabs()),
+                      Expanded(
+                        child: Align(
+                          alignment: Alignment.centerRight,
+                          child: _AccountMenu(
+                            email: _me?.email,
+                            loading: _meLoading,
+                            onLogout: _logout,
+                            onOpenSettings: _openSettingsDrawer,
+                            onRefreshMe: _loadMe,
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
+              ],
 
               const SizedBox(height: 12),
 
@@ -158,13 +270,30 @@ class _HomeTabsPageState extends State<HomeTabsPage> {
                     }
 
                     final clothes = snapshot.data ?? [];
-                    final library = <Cloth>[];
 
                     return TabBarView(
                       children: [
-                        ClothesGridPage(
-                          clothes: library,
-                          emptyText: 'Aucun vêtement scanné pour le moment.',
+                        FutureBuilder<List<Cloth>>(
+                          future: _libraryFuture ?? _libraryApi.getLibrary(),
+                          builder: (context, libSnap) {
+                            if (libSnap.connectionState ==
+                                ConnectionState.waiting) {
+                              return const Center(
+                                child: CircularProgressIndicator(),
+                              );
+                            }
+                            if (libSnap.hasError) {
+                              return Center(
+                                child: Text('Erreur: ${libSnap.error}'),
+                              );
+                            }
+                            final library = libSnap.data ?? <Cloth>[];
+                            return ClothesGridPage(
+                              clothes: library,
+                              emptyText:
+                                  'Aucun vêtement scanné pour le moment.',
+                            );
+                          },
                         ),
                         ClothesGridPage(
                           clothes: clothes,
@@ -188,28 +317,29 @@ class _CenteredMinimalTabs extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final w = MediaQuery.of(context).size.width;
+    final isMobile = w < 600;
+
+    final labelStyle = TextStyle(
+      fontSize: isMobile ? 11 : 13,
+      fontWeight: FontWeight.w400,
+      letterSpacing: isMobile ? 0.2 : 0.7,
+    );
+
     return SizedBox(
       height: 34,
       child: TabBar(
-        isScrollable: false,
+        isScrollable: true,
 
         splashFactory: NoSplash.splashFactory,
         overlayColor: const WidgetStatePropertyAll(Colors.transparent),
         enableFeedback: false,
 
-        labelStyle: const TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w400,
-          letterSpacing: 0.7,
-        ),
-        unselectedLabelStyle: const TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w400,
-          letterSpacing: 0.7,
-        ),
+        labelStyle: labelStyle,
+        unselectedLabelStyle: labelStyle,
 
         labelColor: Colors.black,
-        unselectedLabelColor: Color(0xFFBDBDBD),
+        unselectedLabelColor: const Color(0xFFBDBDBD),
 
         indicatorSize: TabBarIndicatorSize.label,
         indicatorColor: Colors.black,
@@ -218,20 +348,102 @@ class _CenteredMinimalTabs extends StatelessWidget {
         dividerColor: Colors.transparent,
 
         tabs: const [
-          Tab(child: Center(child: Text('BIBLIOTHEQUE'))),
-          Tab(child: Center(child: Text('COLLECTION'))),
+          Tab(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                'BIBLIOTHÈQUE',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+          Tab(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                'COLLECTION',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
         ],
       ),
     );
   }
 }
 
-class _SettingsDrawer extends StatelessWidget {
-  const _SettingsDrawer();
+class _AccountMenu extends StatelessWidget {
+  const _AccountMenu({
+    required this.email,
+    required this.loading,
+    required this.onLogout,
+    required this.onOpenSettings,
+    required this.onRefreshMe,
+  });
+
+  final String? email;
+  final bool loading;
+  final Future<void> Function() onLogout;
+  final VoidCallback onOpenSettings;
+  final Future<void> Function() onRefreshMe;
 
   @override
   Widget build(BuildContext context) {
+    return PopupMenuButton<String>(
+      tooltip: 'Compte',
+      icon: const Icon(Icons.account_circle_outlined),
+      onSelected: (value) async {
+        if (value == 'logout') await onLogout();
+      },
+      itemBuilder: (_) => [
+        PopupMenuItem<String>(
+          enabled: false,
+          value: 'noop',
+          child: Row(
+            children: [
+              const Icon(Icons.person_outline, size: 18),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  loading ? 'Chargement…' : (email ?? 'Utilisateur'),
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const PopupMenuDivider(),
+        const PopupMenuItem(
+          value: 'logout',
+          child: Row(
+            children: [
+              Icon(Icons.logout, size: 18),
+              SizedBox(width: 10),
+              Text('Se déconnecter'),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SettingsDrawer extends StatelessWidget {
+  const _SettingsDrawer({this.email});
+
+  final String? email;
+
+  @override
+  Widget build(BuildContext context) {
+    final w = MediaQuery.of(context).size.width;
+    final isMobile = w < 600;
+
     return Drawer(
+      width: isMobile ? w * 0.85 : 360,
       child: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -242,7 +454,25 @@ class _SettingsDrawer extends StatelessWidget {
                 'Paramètres',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
+              if (email != null) ...[
+                const Text(
+                  'Compte',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.black54,
+                    letterSpacing: 0.4,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  email!,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 16),
+              ],
               const Text('Ajoute ici tes options : profil, thème, etc.'),
               const Spacer(),
               FilledButton.icon(
@@ -318,6 +548,7 @@ class _ClothesGridPageState extends State<ClothesGridPage> {
             builder: (context, constraints) {
               final w = constraints.maxWidth;
 
+              // Ajuste automatique du nombre de colonnes selon la largeur
               int crossAxisCount = 2;
               if (w >= 1200) {
                 crossAxisCount = 6;
@@ -390,6 +621,7 @@ class _ClothTile extends StatelessWidget {
               cloth.imageAsset,
               fit: BoxFit.contain,
               errorBuilder: (context, error, stack) {
+                // placeholder si l’image n’existe pas encore
                 return Container(
                   width: double.infinity,
                   decoration: BoxDecoration(
