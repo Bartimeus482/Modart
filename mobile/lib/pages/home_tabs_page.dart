@@ -681,7 +681,9 @@ class _ClothTile extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Text(
-            cloth.name,
+            cloth.taille != null
+                ? '${cloth.name} (${cloth.taille})'
+                : cloth.name,
             style: const TextStyle(
               fontSize: 13,
               letterSpacing: 0.5,

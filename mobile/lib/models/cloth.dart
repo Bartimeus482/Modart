@@ -8,6 +8,7 @@ class Cloth {
   final String? matiere;
   final List<String>? entretien;
   final String? shop;
+  final String? taille;
 
   const Cloth({
     required this.id,
@@ -18,6 +19,7 @@ class Cloth {
     this.matiere,
     this.entretien,
     this.shop,
+    this.taille,
   });
 
   bool get hasDetails {
@@ -25,7 +27,8 @@ class Cloth {
         reference != null ||
         matiere != null ||
         (entretien != null && entretien!.isNotEmpty) ||
-        shop != null;
+        shop != null ||
+        taille != null;
   }
 
   factory Cloth.fromJson(Map<String, dynamic> json) {
@@ -35,7 +38,7 @@ class Cloth {
         : null;
 
     final matiere = (json['matière'] ?? json['matiere'])?.toString();
-
+    final taille = (json['Taille'] ?? json['taille'])?.toString();
     return Cloth(
       id: json['id'].toString(),
       name: (json['name'] ?? '').toString(),
@@ -45,6 +48,7 @@ class Cloth {
       matiere: matiere,
       entretien: entretien,
       shop: json['shop']?.toString(),
+      taille: taille,
     );
   }
 }

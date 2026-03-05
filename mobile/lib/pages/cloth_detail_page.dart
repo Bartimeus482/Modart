@@ -120,6 +120,10 @@ class ClothDetailPage extends StatelessWidget {
                           Text(cloth.reference!, style: textStyle),
                           const SizedBox(height: 16),
                         ],
+                        if (cloth.taille != null) ...[
+                          Text('Taille ${cloth.taille}', style: textStyle),
+                          const SizedBox(height: 16),
+                        ],
                         if (cloth.matiere != null) ...[
                           Text('Matière', style: textStyle),
                           const SizedBox(height: 6),
