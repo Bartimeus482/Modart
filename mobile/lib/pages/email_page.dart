@@ -48,7 +48,7 @@ class _EmailPageState extends State<EmailPage> {
           builder: (_) => PasswordPage(
             email: email,
             mode: exists ? PasswordMode.login : PasswordMode.signup,
-            auth: _auth, // ✅ on passe la même instance
+            auth: _auth,
           ),
         ),
       );
@@ -84,7 +84,6 @@ class _EmailPageState extends State<EmailPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          // ✅ colle ici exactement ton contenu actuel
                           const SizedBox(height: 40),
                           const Text(
                             "Log in or sign up",

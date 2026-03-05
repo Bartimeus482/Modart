@@ -3,10 +3,9 @@ class Cloth {
   final String name;
   final String imageAsset;
 
-  // ✅ Détails optionnels
   final String? origin;
   final String? reference;
-  final String? matiere; // "matière" dans le JSON
+  final String? matiere;
   final List<String>? entretien;
   final String? shop;
 
@@ -35,7 +34,6 @@ class Cloth {
         ? entretienRaw.map((e) => e.toString()).toList()
         : null;
 
-    // JSON clé "matière" (accent) -> on supporte aussi "matiere" au cas où
     final matiere = (json['matière'] ?? json['matiere'])?.toString();
 
     return Cloth(

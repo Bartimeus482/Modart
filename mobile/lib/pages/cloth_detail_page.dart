@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/cloth.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class ClothDetailPage extends StatelessWidget {
   const ClothDetailPage({
@@ -24,6 +25,9 @@ class ClothDetailPage extends StatelessWidget {
       height: 1.35,
     );
 
+    debugPrint(
+      'DETAIL ${cloth.name} showShopLink=$showShopLink shop=${cloth.shop}',
+    );
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -135,13 +139,34 @@ class ClothDetailPage extends StatelessWidget {
                           const SizedBox(height: 16),
                         ],
                         if (showShopLink && cloth.shop != null) ...[
-                          Text('Boutique', style: textStyle),
-                          const SizedBox(height: 6),
                           Text(
-                            cloth.shop!,
-                            style: textStyle.copyWith(
-                              color: Colors.black87,
-                              decoration: TextDecoration.underline,
+                            'Vous pouvez retrouver le ${cloth.name}, dans la',
+                            style: textStyle,
+                          ),
+                          const SizedBox(height: 6),
+                          InkWell(
+                            onTap: () async {
+                              final uri = Uri.parse(cloth.shop!);
+                              final ok = await launchUrl(
+                                uri,
+                                mode: LaunchMode.externalApplication,
+                              );
+                              if (!ok && context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      "Impossible d’ouvrir le lien.",
+                                    ),
+                                  ),
+                                );
+                              }
+                            },
+                            child: Text(
+                              'boutique',
+                              style: textStyle.copyWith(
+                                decoration: TextDecoration.underline,
+                                fontWeight: FontWeight.w500,
+                              ),
                             ),
                           ),
                         ],

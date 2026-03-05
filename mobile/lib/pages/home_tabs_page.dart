@@ -75,7 +75,6 @@ class _HomeTabsPageState extends State<HomeTabsPage> {
   Future<List<Cloth>> _fetchAndEnrichLibrary() async {
     final items = await _libraryApi.getLibrary();
 
-    // s'assurer que la map JSON est prête
     if (_idToCloth.isEmpty || _nameToCloth.isEmpty) {
       final clothes = await _clothesFuture;
       _idToCloth
@@ -346,16 +345,15 @@ class _CenteredMinimalTabs extends StatelessWidget {
     final isMobile = w < 600;
 
     final labelStyle = TextStyle(
-      fontSize: isMobile ? 11 : 13,
-      fontWeight: FontWeight.w400,
-      letterSpacing: isMobile ? 0.2 : 0.7,
+      fontSize: isMobile ? 14 : 15,
+      fontWeight: FontWeight.w500,
+      letterSpacing: isMobile ? 0.2 : 0.5,
     );
 
     return SizedBox(
-      height: 34,
+      height: 44,
       child: TabBar(
-        isScrollable: true,
-
+        isScrollable: false,
         splashFactory: NoSplash.splashFactory,
         overlayColor: const WidgetStatePropertyAll(Colors.transparent),
         enableFeedback: false,
@@ -368,29 +366,25 @@ class _CenteredMinimalTabs extends StatelessWidget {
 
         indicatorSize: TabBarIndicatorSize.label,
         indicatorColor: Colors.black,
-        indicatorWeight: 1.0,
+        indicatorWeight: 2.0,
 
         dividerColor: Colors.transparent,
 
         tabs: const [
           Tab(
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
+            child: Align(
+              alignment: Alignment.center,
               child: Text(
-                'BIBLIOTHÈQUE',
+                'Ma Collection',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
             ),
           ),
           Tab(
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(
-                'COLLECTION',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
+            child: Align(
+              alignment: Alignment.center,
+              child: Text('Shop', maxLines: 1, overflow: TextOverflow.ellipsis),
             ),
           ),
         ],
@@ -576,7 +570,6 @@ class _ClothesGridPageState extends State<ClothesGridPage> {
             builder: (context, constraints) {
               final w = constraints.maxWidth;
 
-              // Ajuste automatique du nombre de colonnes selon la largeur
               int crossAxisCount = 2;
               if (w >= 1200) {
                 crossAxisCount = 6;

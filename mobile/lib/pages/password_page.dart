@@ -106,7 +106,6 @@ class _PasswordPageState extends State<PasswordPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          // ✅ colle ici exactement ton contenu actuel de Column
                           const SizedBox(height: 24),
                           Row(
                             children: [
