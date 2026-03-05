@@ -13,6 +13,7 @@ import 'dart:async';
 import '../services/nfc_scan.dart';
 import '../services/pending_scans.dart';
 import 'cloth_detail_page.dart';
+import '../services/esp32_socket_service.dart';
 
 class HomeTabsPage extends StatefulWidget {
   const HomeTabsPage({super.key});
@@ -45,6 +46,7 @@ class _HomeTabsPageState extends State<HomeTabsPage> {
   @override
   void initState() {
     super.initState();
+    Esp32SocketService.instance.connect('ws://10.213.38.168:81');
     _clothesFuture = _service.loadClothes();
 
     _clothesFuture.then((clothes) {
@@ -168,6 +170,7 @@ class _HomeTabsPageState extends State<HomeTabsPage> {
   @override
   void dispose() {
     _nfcSub?.cancel();
+    Esp32SocketService.instance.disconnect();
     super.dispose();
   }
 
