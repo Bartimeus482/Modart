@@ -6,10 +6,15 @@ class ClothDetailPage extends StatelessWidget {
     super.key,
     required this.cloth,
     required this.showShopLink,
+    required this.canDelete,
+    this.onDelete,
   });
 
   final Cloth cloth;
   final bool showShopLink;
+
+  final bool canDelete;
+  final Future<void> Function(String clothId)? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -18,10 +23,7 @@ class ClothDetailPage extends StatelessWidget {
       fontWeight: FontWeight.w400,
       height: 1.35,
     );
-    debugPrint(
-      'DETAIL ${cloth.name} origin=${cloth.origin} ref=${cloth.reference} '
-      'mat=${cloth.matiere} ent=${cloth.entretien} shop=${cloth.shop}',
-    );
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -29,11 +31,55 @@ class ClothDetailPage extends StatelessWidget {
         foregroundColor: Colors.black,
         elevation: 0,
         title: Text(cloth.name),
+        actions: [
+          if (canDelete)
+            IconButton(
+              tooltip: 'Supprimer',
+              icon: const Icon(Icons.delete_outline),
+              onPressed: () async {
+                final ok = await showDialog<bool>(
+                  context: context,
+                  builder: (_) => AlertDialog(
+                    title: const Text('Supprimer ce vêtement ?'),
+                    content: Text('Retirer ${cloth.name} de la bibliothèque.'),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('Annuler'),
+                      ),
+                      FilledButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        child: const Text('Supprimer'),
+                      ),
+                    ],
+                  ),
+                );
+
+                if (ok != true) return;
+
+                try {
+                  if (onDelete != null) {
+                    await onDelete!(cloth.id);
+                  }
+                  if (!context.mounted) return;
+
+                  Navigator.of(context).pop();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('${cloth.name} supprimé')),
+                  );
+                } catch (e) {
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Erreur suppression: $e')),
+                  );
+                }
+              },
+            ),
+        ],
       ),
       body: SafeArea(
         child: Column(
           children: [
-            // Image centrée
             Expanded(
               child: Center(
                 child: Image.asset(
@@ -52,8 +98,6 @@ class ClothDetailPage extends StatelessWidget {
                 ),
               ),
             ),
-
-            // Infos
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
               child: cloth.hasDetails

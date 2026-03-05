@@ -327,6 +327,36 @@ Router buildRouter() {
     return _json(200, {'items': items});
   });
 
+  r.delete('/library/<clothId>', (Request req, String clothId) async {
+    final token = _readBearerToken(req);
+    if (token == null || token.isEmpty) {
+      return _json(401, {'error': 'missing_token'});
+    }
+
+    try {
+      final jwt = _verifyJwt(token);
+
+      final sub = jwt.payload['sub'];
+      final userId = sub is int ? sub : int.tryParse(sub.toString());
+      if (userId == null) return _json(401, {'error': 'invalid_token'});
+
+      await _db.execute(
+        Sql.named(
+          'DELETE FROM user_library WHERE user_id=@uid AND cloth_id=@cid',
+        ),
+        parameters: {'uid': userId, 'cid': clothId},
+      );
+
+      return _json(200, {'ok': true});
+    } on JWTExpiredException {
+      return _json(401, {'error': 'token_expired'});
+    } on JWTException {
+      return _json(401, {'error': 'invalid_token'});
+    } catch (_) {
+      return _json(500, {'error': 'server_error'});
+    }
+  });
+
   r.post('/library/scan', (Request req) async {
     final userId = _userIdFromJwt(req);
     if (userId == null) return _json(401, {'error': 'unauthorized'});

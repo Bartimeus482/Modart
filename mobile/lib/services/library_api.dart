@@ -34,4 +34,12 @@ class LibraryApi {
       headers: {'Authorization': 'Bearer $token'},
     );
   }
+
+  Future<void> removeFromLibrary(String clothId) async {
+    final token = await _requireToken();
+    await _client.deleteJson(
+      '/library/$clothId',
+      headers: {'Authorization': 'Bearer $token'},
+    );
+  }
 }

@@ -311,15 +311,18 @@ class _HomeTabsPageState extends State<HomeTabsPage> {
                               clothes: library,
                               emptyText:
                                   'Aucun vêtement scanné pour le moment.',
-                              showShopLink:
-                                  false, // ✅ Bibliothèque: pas de shop
+                              showShopLink: false,
+                              onDeleteFromLibrary: (clothId) async {
+                                await _libraryApi.removeFromLibrary(clothId);
+                                await _reloadLibrary();
+                              },
                             );
                           },
                         ),
                         ClothesGridPage(
                           clothes: clothes,
                           emptyText: 'Aucun vêtement dans la collection.',
-                          showShopLink: true, // ✅ Collection: shop OK
+                          showShopLink: true,
                         ),
                       ],
                     );
@@ -517,13 +520,14 @@ class ClothesGridPage extends StatefulWidget {
     required this.emptyText,
     this.pageSize = 10,
     required this.showShopLink,
+    this.onDeleteFromLibrary,
   });
 
   final List<Cloth> clothes;
   final String emptyText;
   final int pageSize;
   final bool showShopLink;
-
+  final Future<void> Function(String clothId)? onDeleteFromLibrary;
   @override
   State<ClothesGridPage> createState() => _ClothesGridPageState();
 }
@@ -601,6 +605,7 @@ class _ClothesGridPageState extends State<ClothesGridPage> {
                   return _ClothTile(
                     cloth: c,
                     showShopLink: widget.showShopLink,
+                    onDeleteFromLibrary: widget.onDeleteFromLibrary,
                   );
                 },
               );
@@ -634,10 +639,15 @@ class _ClothesGridPageState extends State<ClothesGridPage> {
 }
 
 class _ClothTile extends StatelessWidget {
-  const _ClothTile({required this.cloth, required this.showShopLink});
+  const _ClothTile({
+    required this.cloth,
+    required this.showShopLink,
+    this.onDeleteFromLibrary,
+  });
 
   final Cloth cloth;
   final bool showShopLink;
+  final Future<void> Function(String clothId)? onDeleteFromLibrary;
 
   @override
   Widget build(BuildContext context) {
@@ -646,8 +656,12 @@ class _ClothTile extends StatelessWidget {
       onTap: () {
         Navigator.of(context).push(
           MaterialPageRoute(
-            builder: (_) =>
-                ClothDetailPage(cloth: cloth, showShopLink: showShopLink),
+            builder: (_) => ClothDetailPage(
+              cloth: cloth,
+              showShopLink: showShopLink,
+              canDelete: onDeleteFromLibrary != null,
+              onDelete: onDeleteFromLibrary,
+            ),
           ),
         );
       },
